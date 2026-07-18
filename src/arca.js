@@ -1,4 +1,6 @@
 const { Arca } = require('@arcasdk/core');
+const os = require('os');
+const path = require('path');
 
 /**
  * Emite una factura electrónica en ARCA (AFIP) en modo homologación (testing).
@@ -32,6 +34,7 @@ async function emitirFactura(paymentData) {
     key,
     production: false,    // ← modo testing/homologación
     useHttpsAgent: true,  // requerido en Node.js para servidores ARCA legacy
+    ticketPath: path.join(os.tmpdir(), 'arca-tickets'), // Vercel (serverless) solo permite escribir en /tmp
   });
 
   // ─── Calcular montos con IVA 21% ───
