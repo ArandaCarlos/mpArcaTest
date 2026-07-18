@@ -45,15 +45,16 @@ app.post('/api/create-preference', async (req, res) => {
 // Flujo: recibir → responder 200 → verificar pago en API → facturar → loguear
 // ─────────────────────────────────────────────────────────────
 app.post('/webhooks/mp', async (req, res) => {
-  // Responder inmediatamente para evitar timeout de MP (máx. 5 seg)
-  res.status(200).json({ status: 'received' });
-
   const { type, data } = req.body;
+
+  // ── IMPORTANTE (Vercel serverless): NO responder antes de procesar.
+  // En funciones serverless la ejecución se corta al enviar res.json().
+  // MercadoPago espera hasta ~30s el 200, así que procesamos primero.
 
   // Solo procesar notificaciones de pagos
   if (type !== 'payment' || !data?.id) {
     console.log('[webhook] Ignorando notificación de tipo:', type);
-    return;
+    return res.status(200).json({ status: 'ignored', type });
   }
 
   const paymentId = String(data.id);
@@ -77,7 +78,7 @@ app.post('/webhooks/mp', async (req, res) => {
         invoiceReason: `Pago no aprobado. Estado: ${payment.status}`,
         processedAt: new Date().toISOString(),
       });
-      return;
+      return res.status(200).json({ status: 'received', paymentStatus: payment.status });
     }
 
     // ─── Paso 3: Emitir factura en ARCA ───
@@ -98,7 +99,7 @@ app.post('/webhooks/mp', async (req, res) => {
       console.error('[webhook] Error ARCA:', arcaError.message);
     }
 
-    // ─── Paso 4: Guardar log del resultado ───
+    // ─── Paso 4: Guardar log y responder ───
     savePayment({
       paymentId,
       status: payment.status,
@@ -112,6 +113,8 @@ app.post('/webhooks/mp', async (req, res) => {
       processedAt: new Date().toISOString(),
     });
 
+    return res.status(200).json({ status: 'processed', invoiceStatus, cae: invoiceResult?.CAE || null });
+
   } catch (error) {
     console.error('[webhook] Error general:', error.message);
     savePayment({
@@ -121,6 +124,8 @@ app.post('/webhooks/mp', async (req, res) => {
       invoiceError: error.message,
       processedAt: new Date().toISOString(),
     });
+    // Siempre devolver 200 para que MP no reintente indefinidamente
+    return res.status(200).json({ status: 'error', error: error.message });
   }
 });
 
