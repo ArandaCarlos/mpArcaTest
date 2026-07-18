@@ -1,0 +1,239 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Pago confirmado — Suite Pro Developer</title>
+  <meta name="description" content="Tu pago fue procesado exitosamente. Factura emitida vía ARCA." />
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+
+<div class="bg-orbs" aria-hidden="true">
+  <div class="orb orb-1"></div>
+  <div class="orb orb-2"></div>
+</div>
+
+<div class="page success-page">
+
+  <div class="success-card">
+
+    <!-- Ícono de éxito -->
+    <div class="success-icon">
+      <svg width="32" height="32" viewBox="0 0 24 24" fill="none"
+           stroke="currentColor" stroke-width="2.5"
+           stroke-linecap="round" stroke-linejoin="round">
+        <polyline points="20 6 9 17 4 12"/>
+      </svg>
+    </div>
+
+    <h1 class="success-title">¡Pago confirmado! 🎉</h1>
+    <p class="success-sub" id="status-msg">
+      Tu pago fue procesado. Estamos emitiendo tu factura electrónica…
+    </p>
+
+    <!-- Sección de factura -->
+    <div class="invoice-section" id="invoice-section">
+      <div class="invoice-title">📄 Detalle del comprobante</div>
+
+      <div id="invoice-loading" style="text-align:center; padding: 16px 0;">
+        <span class="status-badge loading-badge">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+               stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+               style="animation: spin 1s linear infinite; display:inline">
+            <line x1="12" y1="2" x2="12" y2="6"/>
+            <line x1="12" y1="18" x2="12" y2="22"/>
+            <line x1="4.93" y1="4.93" x2="7.76" y2="7.76"/>
+            <line x1="16.24" y1="16.24" x2="19.07" y2="19.07"/>
+            <line x1="2" y1="12" x2="6" y2="12"/>
+            <line x1="18" y1="12" x2="22" y2="12"/>
+            <line x1="4.93" y1="19.07" x2="7.76" y2="16.24"/>
+            <line x1="16.24" y1="7.76" x2="19.07" y2="4.93"/>
+          </svg>
+          Procesando factura ARCA…
+        </span>
+      </div>
+
+      <div id="invoice-data" style="display:none">
+        <div class="invoice-row">
+          <span class="invoice-key">ID de Pago</span>
+          <span class="invoice-val" id="inv-payment-id">—</span>
+        </div>
+        <div class="invoice-row">
+          <span class="invoice-key">Producto</span>
+          <span class="invoice-val" id="inv-description">Suite Pro Developer</span>
+        </div>
+        <div class="invoice-row">
+          <span class="invoice-key">Monto</span>
+          <span class="invoice-val" id="inv-amount">—</span>
+        </div>
+        <div class="invoice-row">
+          <span class="invoice-key">Email pagador</span>
+          <span class="invoice-val" id="inv-email">—</span>
+        </div>
+        <div class="invoice-row">
+          <span class="invoice-key">Tipo comprobante</span>
+          <span class="invoice-val">Factura B · Consumidor Final</span>
+        </div>
+        <div class="invoice-row">
+          <span class="invoice-key">Estado factura</span>
+          <span id="inv-status">—</span>
+        </div>
+        <div class="invoice-row" id="inv-cae-row">
+          <span class="invoice-key">CAE (ARCA)</span>
+          <span class="invoice-val cae" id="inv-cae">—</span>
+        </div>
+        <div class="invoice-row" id="inv-vto-row">
+          <span class="invoice-key">Venc. CAE</span>
+          <span class="invoice-val" id="inv-vto">—</span>
+        </div>
+        <div class="invoice-row">
+          <span class="invoice-key">Procesado</span>
+          <span class="invoice-val" id="inv-date">—</span>
+        </div>
+      </div>
+
+      <div id="invoice-error" style="display:none">
+        <span class="status-badge error-badge" style="margin-top:8px">
+          ⚠️ Error al emitir factura
+        </span>
+        <p id="invoice-error-msg" style="margin-top:12px; font-size:0.85rem; color:var(--text-muted)"></p>
+      </div>
+    </div>
+
+    <!-- Acciones -->
+    <div style="display:flex; gap:12px; justify-content:center; flex-wrap:wrap">
+      <a href="/" class="btn-secondary">
+        ← Volver al inicio
+      </a>
+      <a href="/status" class="btn-secondary">
+        Ver todos los pagos →
+      </a>
+    </div>
+
+  </div>
+
+</div>
+
+<style>
+  @keyframes spin {
+    to { transform: rotate(360deg); }
+  }
+</style>
+
+<script>
+  // ── Parámetros de URL (MercadoPago los envía en el back_url) ──
+  const params    = new URLSearchParams(window.location.search);
+  const paymentId = params.get('payment_id');
+  const status    = params.get('status');
+  const collectionStatus = params.get('collection_status');
+
+  // ── Si es pago pendiente, ajustar mensaje ──
+  if (status === 'pending' || collectionStatus === 'pending') {
+    document.querySelector('.success-title').textContent = 'Pago en proceso ⏳';
+    document.getElementById('status-msg').textContent =
+      'Tu pago está siendo procesado. Te avisaremos cuando sea confirmado.';
+    document.querySelector('.success-icon').style.background = 'rgba(245,158,11,0.15)';
+    document.querySelector('.success-icon').style.borderColor = 'rgba(245,158,11,0.4)';
+  }
+
+  // ── Polling al endpoint /status para encontrar este pago ──
+  let attempts = 0;
+  const MAX_ATTEMPTS = 12; // ~60 segundos
+  const POLL_INTERVAL = 5000;
+
+  async function pollForPayment() {
+    if (!paymentId) {
+      // Sin payment_id: mostrar la sección sin datos específicos
+      showGenericSuccess();
+      return;
+    }
+
+    try {
+      const res = await fetch('/status');
+      const { payments } = await res.json();
+
+      const found = payments.find(p => String(p.paymentId) === String(paymentId));
+
+      if (found) {
+        showPaymentDetails(found);
+        return;
+      }
+
+      attempts++;
+      if (attempts < MAX_ATTEMPTS) {
+        setTimeout(pollForPayment, POLL_INTERVAL);
+      } else {
+        // Timeout: mostrar datos básicos de la URL
+        showGenericSuccess();
+      }
+    } catch (e) {
+      attempts++;
+      if (attempts < MAX_ATTEMPTS) {
+        setTimeout(pollForPayment, POLL_INTERVAL);
+      } else {
+        showGenericSuccess();
+      }
+    }
+  }
+
+  function showPaymentDetails(payment) {
+    document.getElementById('invoice-loading').style.display = 'none';
+    document.getElementById('invoice-data').style.display = 'block';
+
+    document.getElementById('inv-payment-id').textContent  = payment.paymentId || '—';
+    document.getElementById('inv-description').textContent = payment.description || 'Suite Pro Developer';
+    document.getElementById('inv-amount').textContent      = payment.amount
+      ? `ARS $${Number(payment.amount).toLocaleString('es-AR', { minimumFractionDigits: 2 })}`
+      : '—';
+    document.getElementById('inv-email').textContent       = payment.email || '—';
+    document.getElementById('inv-date').textContent        = payment.processedAt
+      ? new Date(payment.processedAt).toLocaleString('es-AR')
+      : '—';
+
+    // Estado de factura
+    const statusEl = document.getElementById('inv-status');
+    if (payment.invoiceStatus === 'emitted' && payment.cae) {
+      statusEl.innerHTML = `<span class="status-badge success-badge">✓ Emitida</span>`;
+      document.getElementById('inv-cae').textContent  = payment.cae;
+      document.getElementById('inv-vto').textContent  = formatDate(payment.caeFchVto);
+      document.getElementById('status-msg').textContent =
+        '¡Todo listo! Tu factura electrónica fue emitida exitosamente en ARCA.';
+    } else if (payment.invoiceStatus === 'error') {
+      statusEl.innerHTML = `<span class="status-badge error-badge">✗ Error</span>`;
+      document.getElementById('inv-cae-row').style.display = 'none';
+      document.getElementById('inv-vto-row').style.display = 'none';
+      document.getElementById('invoice-error').style.display = 'block';
+      document.getElementById('invoice-error-msg').textContent =
+        payment.invoiceError || 'Error desconocido al emitir la factura.';
+    } else if (payment.invoiceStatus === 'skipped') {
+      statusEl.innerHTML = `<span class="status-badge loading-badge">⊘ Omitida</span>`;
+      document.getElementById('inv-cae-row').style.display = 'none';
+      document.getElementById('inv-vto-row').style.display = 'none';
+    }
+  }
+
+  function showGenericSuccess() {
+    document.getElementById('invoice-loading').style.display = 'none';
+    document.getElementById('invoice-data').style.display = 'block';
+    document.getElementById('inv-payment-id').textContent = paymentId || '(no disponible)';
+    document.getElementById('inv-status').innerHTML =
+      `<span class="status-badge loading-badge">⏳ Procesando…</span>`;
+    document.getElementById('inv-cae-row').style.display = 'none';
+    document.getElementById('inv-vto-row').style.display = 'none';
+    document.getElementById('status-msg').textContent =
+      'Tu pago fue registrado. La factura puede tardar unos minutos en procesarse.';
+  }
+
+  // Formatea fecha YYYYMMDD a DD/MM/YYYY
+  function formatDate(str) {
+    if (!str || str.length < 8) return str || '—';
+    return `${str.slice(6, 8)}/${str.slice(4, 6)}/${str.slice(0, 4)}`;
+  }
+
+  // ── Iniciar polling ──
+  pollForPayment();
+</script>
+
+</body>
+</html>
