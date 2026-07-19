@@ -92,8 +92,8 @@ app.post('/webhooks/mp', async (req, res) => {
         description: payment.description || PRODUCT.title,
         payer: payment.payer,
       });
-      invoiceStatus = invoiceResult?.CAE ? 'emitted' : 'error';
-      console.log(`[webhook] Factura emitida. CAE: ${invoiceResult?.CAE}`);
+      invoiceStatus = invoiceResult?.cae ? 'emitted' : 'error';
+      console.log(`[webhook] Factura emitida. CAE: ${invoiceResult?.cae}`);
     } catch (arcaError) {
       invoiceError = arcaError.message;
       console.error('[webhook] Error ARCA:', arcaError.message);
@@ -108,12 +108,12 @@ app.post('/webhooks/mp', async (req, res) => {
       description: payment.description || PRODUCT.title,
       invoiceStatus,
       invoiceError,
-      cae: invoiceResult?.CAE || null,
-      caeFchVto: invoiceResult?.CAEFchVto || null,
+      cae: invoiceResult?.cae || null,
+      caeFchVto: invoiceResult?.caeFchVto || null,
       processedAt: new Date().toISOString(),
     });
 
-    return res.status(200).json({ status: 'processed', invoiceStatus, cae: invoiceResult?.CAE || null });
+    return res.status(200).json({ status: 'processed', invoiceStatus, cae: invoiceResult?.cae || null });
 
   } catch (error) {
     console.error('[webhook] Error general:', error.message);
