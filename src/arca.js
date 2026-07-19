@@ -1,6 +1,7 @@
 const { Arca } = require('@arcasdk/core');
 const os = require('os');
 const path = require('path');
+const { RedisTicketStorage } = require('./redisStorage');
 
 /**
  * Emite una factura electrónica en ARCA (AFIP) en modo homologación (testing).
@@ -27,14 +28,19 @@ async function emitirFactura(paymentData) {
     );
   }
 
-  // Instanciar SDK en modo homologación (testing)
+  // Configuración de ARCA
+  const cuit = Number(process.env.ARCA_CUIT) || 20111111112;
+  const isProduction = false; // ← modo testing/homologación
+
+  // Instanciar SDK
   const arca = new Arca({
-    cuit: Number(process.env.ARCA_CUIT) || 20111111112,
+    cuit,
     cert,
     key,
-    production: false,    // ← modo testing/homologación
+    production: isProduction,
     useHttpsAgent: true,  // requerido en Node.js para servidores ARCA legacy
-    ticketPath: path.join(os.tmpdir(), 'arca-tickets'), // Vercel (serverless) solo permite escribir en /tmp
+    // Reemplazamos /tmp por Vercel KV para que los tickets persistan 12 horas reales
+    ticketStorage: new RedisTicketStorage(cuit, isProduction),
   });
 
   // ─── Calcular montos con IVA 21% ───
