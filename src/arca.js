@@ -63,6 +63,7 @@ async function emitirFactura(paymentData) {
     Concepto: 1,         // 1 = Productos
     DocTipo: 99,         // 99 = Consumidor Final (sin CUIT)
     DocNro: 0,           // 0 para Consumidor Final
+    CondicionIVAReceptorId: 5, // 5 = Consumidor Final (Obligatorio desde RG 5616)
     CbteFch: fecha,      // Fecha del comprobante (string YYYYMMDD)
     ImpTotal: total,     // Importe total (precio + IVA)
     ImpTotConc: 0,       // Importe neto no gravado
