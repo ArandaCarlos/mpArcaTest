@@ -93,7 +93,19 @@ app.post('/webhooks/mp', async (req, res) => {
         payer: payment.payer,
       });
       invoiceStatus = invoiceResult?.cae ? 'emitted' : 'error';
-      console.log(`[webhook] Factura emitida. CAE: ${invoiceResult?.cae}`);
+      
+      if (!invoiceResult?.cae) {
+        console.log(`[webhook] AFIP Rechazó el comprobante. Respuesta completa:`, JSON.stringify(invoiceResult, null, 2));
+        
+        // Extraer los motivos del rechazo de la respuesta de AFIP
+        const errors = invoiceResult?.response?.Errors?.Err || [];
+        const obs = invoiceResult?.response?.FeDetResp?.FECAEDetResponse?.[0]?.Observaciones?.Obs || [];
+        const combinedErrors = [...errors, ...obs].map(e => `${e.Code}: ${e.Msg}`).join(' | ');
+        
+        invoiceError = combinedErrors || 'AFIP rechazó el comprobante sin dar un motivo específico.';
+      } else {
+        console.log(`[webhook] Factura emitida. CAE: ${invoiceResult?.cae}`);
+      }
     } catch (arcaError) {
       invoiceError = arcaError.message;
       console.error('[webhook] Error ARCA:', arcaError.message);
